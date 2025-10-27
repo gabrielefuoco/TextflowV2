@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 def process_chunks(
     chunks: List[str], file_name: str, prompts: OrderedDict,
-    model_config: Dict, order_mode: str = "chunk"
+    model_config: Dict, google_api_key: str, order_mode: str = "chunk"
 ) -> Tuple[str, str]:
     """Elabora una lista di chunk di testo pre-esistenti e restituisce il risultato."""
     logging.info(f"Inizio elaborazione LLM per {len(chunks)} chunk pre-calcolati di: {file_name}")
@@ -17,7 +17,7 @@ def process_chunks(
         logging.warning(f"Nessun chunk fornito per il file '{file_name}'.")
         return f"{Path(file_name).stem}.md", "# ATTENZIONE: Nessun contenuto da processare."
 
-    llm = get_llm(model_config)
+    llm = get_llm(model_config, google_api_key)
     results = {}
     for chunk_idx, chunk in enumerate(chunks, start=1):
         for prompt_name, prompt_text in prompts.items():
@@ -36,7 +36,7 @@ def process_chunks(
 
 def process_single_file(
     file_content: str, file_name: str, prompts: OrderedDict,
-    chunking_config: Dict, model_config: Dict, order_mode: str = "chunk"
+    chunking_config: Dict, model_config: Dict, google_api_key: str, order_mode: str = "chunk"
 ) -> Tuple[str, str]:
     """Divide il contenuto di un file in chunk e poi li elabora."""
     logging.info(f"Eseguo lo splitting per: {file_name}")
@@ -44,7 +44,7 @@ def process_single_file(
     chunks = splitter.split(file_content)
     logging.info(f"Contenuto di '{file_name}' diviso in {len(chunks)} chunk.")
     
-    return process_chunks(chunks, file_name, prompts, model_config, order_mode)
+    return process_chunks(chunks, file_name, prompts, model_config, google_api_key, order_mode)
 
 
 def compile_results_to_string(

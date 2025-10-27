@@ -1,24 +1,20 @@
-import os
 import logging
 from pathlib import Path
 from typing import List, Dict
-from dotenv import load_dotenv
 from mistralai import Mistral, models
 from pypdf import PdfReader, PdfWriter
 import io
 
-load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def process_pdf_to_markdown(pdf_bytes: bytes, file_name: str, ocr_config: Dict) -> str:
+def process_pdf_to_markdown(pdf_bytes: bytes, file_name: str, ocr_config: Dict, mistral_api_key: str) -> str:
     """Converte il contenuto di un PDF (in byte) in una stringa Markdown usando l'API OCR di Mistral."""
-    api_key = os.getenv("MISTRAL_API_KEY")
-    if not api_key:
+    if not mistral_api_key:
         logger.error("MISTRAL_API_KEY non trovata.")
         raise ValueError("MISTRAL_API_KEY non configurata.")
 
-    client = Mistral(api_key=api_key)
+    client = Mistral(api_key=mistral_api_key)
     pdf_stream = io.BytesIO(pdf_bytes)
 
     try:

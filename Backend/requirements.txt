@@ -1,4 +1,8 @@
-streamlit
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
 python-dotenv
 llama-index
 llama-index-llms-gemini
