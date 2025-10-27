@@ -1,0 +1,6 @@
+Basandoti sul seguente testo, estrai i concetti chiave e fornisci un riassunto tecnico dettagliato in formato markdown.
+
+Testo da analizzare:
+---
+{text_chunk}
+---

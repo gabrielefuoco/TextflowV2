@@ -1,0 +1,5 @@
+{
+  "name": "TextFlowAI",
+  "description": "An intuitive GUI to process text documents by chunking them and applying various AI-powered prompts using the Gemini API. Upload your files, configure your prompts and settings, and let the AI generate insightful results.",
+  "requestFramePermissions": []
+}
