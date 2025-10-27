@@ -1,0 +1,17 @@
+services:
+  backend:
+    build:
+      context: ./Backend
+    ports:
+      - "8000:8000"
+    # Se hai un file .env per le API keys, decomenta la riga seguente
+    # env_file:
+    #   - ./Backend/.env
+
+  frontend:
+    build:
+      context: ./Frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

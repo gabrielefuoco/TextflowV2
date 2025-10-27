@@ -7,12 +7,12 @@ FROM node:20-alpine as build
 WORKDIR /app
 
 # Copia i file di progetto e installa le dipendenze.
-COPY ./prova/package.json ./package.json
-COPY ./prova/package-lock.json ./package-lock.json
+COPY ./package.json ./package.json
+COPY ./package-lock.json ./package-lock.json
 RUN npm install
 
 # Copia il resto del codice sorgente.
-COPY ./prova/ /app
+COPY . /app/
 
 # Esegui il build di produzione.
 RUN npm run build
