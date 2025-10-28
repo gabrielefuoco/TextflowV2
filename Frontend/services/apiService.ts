@@ -22,8 +22,20 @@ export const startProcessingJob = async (files: File[], config: ProcessingReques
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Failed to start processing job. The server returned a non-JSON response.' }));
-    throw new Error(errorData.detail || 'Failed to start processing job.');
+    // Try to parse JSON, otherwise fall back to raw text (e.g., HTML error pages like 413/502)
+    let message = 'Failed to start processing job.';
+    try {
+      const asJson = await response.json();
+      message = asJson.detail || message;
+    } catch {
+      try {
+        const asText = await response.text();
+        message = asText || message;
+      } catch {
+        // ignore
+      }
+    }
+    throw new Error(message);
   }
 
   const result = await response.json();
@@ -44,8 +56,19 @@ export const getJobStatus = async (jobId: string): Promise<JobStatusResponse> =>
     }
     
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Failed to get job status. The server returned a non-JSON response.' }));
-        throw new Error(errorData.detail || 'Failed to get job status.');
+        let message = 'Failed to get job status.';
+        try {
+            const asJson = await response.json();
+            message = asJson.detail || message;
+        } catch {
+            try {
+                const asText = await response.text();
+                message = asText || message;
+            } catch {
+                // ignore
+            }
+        }
+        throw new Error(message);
     }
 
     return response.json();
