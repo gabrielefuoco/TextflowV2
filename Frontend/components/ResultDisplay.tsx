@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store/useAppStore';
+import { DownloadIcon } from './icons';
 
 export const ResultDisplay = () => {
     const { results, jobStatus } = useAppStore();
@@ -43,11 +43,23 @@ export const ResultDisplay = () => {
         <div className="space-y-8 mt-10">
             <h2 className="text-3xl font-bold text-center text-slate-800">Results</h2>
             <div className="bg-white shadow-lg rounded-xl border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                    <h3 className="font-bold text-slate-800">Processing Complete</h3>
-                    <p className="text-sm text-slate-500">
-                        Your file is ready.
-                    </p>
+                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                    <div>
+                        <h3 className="font-bold text-slate-800">Processing Complete</h3>
+                        <p className="text-sm text-slate-500">
+                            Your file is ready.
+                        </p>
+                    </div>
+                    {isMarkdown && (
+                        <a 
+                            href={URL.createObjectURL(results)} 
+                            download="result.md"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-brand-600 text-white font-semibold rounded-lg shadow-sm hover:bg-brand-700 transition-colors"
+                        >
+                            <DownloadIcon className="h-4 w-4" />
+                            <span>Download .md</span>
+                        </a>
+                    )}
                 </div>
                 <div className="p-6">
                     {isZip && (
@@ -58,6 +70,7 @@ export const ResultDisplay = () => {
                                 download="processed_documents.zip"
                                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-brand-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-700 transition-colors transform hover:scale-105"
                             >
+                                <DownloadIcon className="h-5 w-5" />
                                 Download Results (.zip)
                             </a>
                         </div>

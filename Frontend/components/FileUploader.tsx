@@ -1,11 +1,10 @@
-
 import React from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { Card } from './Card';
-import { UploadIcon, FileIcon } from './icons';
+import { UploadIcon, FileIcon, TrashIcon } from './icons';
 
 export const FileUploader = () => {
-  const { uploadedFiles, setUploadedFiles } = useAppStore();
+  const { uploadedFiles, setUploadedFiles, removeUploadedFile } = useAppStore();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -22,6 +21,10 @@ export const FileUploader = () => {
     if (e.dataTransfer.files) {
       setUploadedFiles(Array.from(e.dataTransfer.files));
     }
+  };
+  
+  const handleRemoveFile = (fileName: string) => {
+    removeUploadedFile(fileName);
   };
 
   return (
@@ -50,7 +53,16 @@ export const FileUploader = () => {
                      <FileIcon className="h-5 w-5 text-slate-500 flex-shrink-0" />
                      <span className="text-sm text-slate-800 truncate" title={file.name}>{file.name}</span>
                    </div>
-                  <span className="text-xs text-slate-500 whitespace-nowrap pl-2">{(file.size / 1024).toFixed(2)} KB</span>
+                   <div className="flex items-center space-x-2">
+                     <span className="text-xs text-slate-500 whitespace-nowrap pl-2">{(file.size / 1024).toFixed(2)} KB</span>
+                     <button
+                        onClick={() => handleRemoveFile(file.name)}
+                        className="text-slate-500 hover:text-red-600 p-1 rounded-full transition-colors"
+                        aria-label={`Remove file: ${file.name}`}
+                     >
+                        <TrashIcon className="h-4 w-4" />
+                     </button>
+                   </div>
                 </li>
               ))}
             </ul>

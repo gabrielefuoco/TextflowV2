@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import type { LLMConfig, ChunkingConfig, JobStatus } from '../types';
 
@@ -11,6 +10,7 @@ interface AppState {
   chunkingConfig: ChunkingConfig;
   normalizeText: boolean;
   orderMode: "chunk" | "prompt";
+  preprocessingOnly: boolean;
   jobId: string | null;
   jobStatus: JobStatus;
   jobDetail: string | null;
@@ -27,6 +27,7 @@ const initialState: AppState = {
   chunkingConfig: { max_words: 1000, min_words: 300 },
   normalizeText: true,
   orderMode: "chunk",
+  preprocessingOnly: false,
   jobId: null,
   jobStatus: 'idle',
   jobDetail: null,
@@ -41,6 +42,10 @@ const listeners: Set<() => void> = new Set();
 const actions = {
   setUploadedFiles: (files: File[]) => {
     state.uploadedFiles = files;
+    actions.resetJobState();
+  },
+  removeUploadedFile: (fileName: string) => {
+    state.uploadedFiles = state.uploadedFiles.filter(file => file.name !== fileName);
     actions.resetJobState();
   },
   addSelectedPrompt: (name: string, content: string) => {
@@ -68,6 +73,9 @@ const actions = {
   },
   setOrderMode: (mode: "chunk" | "prompt") => {
     state.orderMode = mode;
+  },
+  setPreprocessingOnly: (isOn: boolean) => {
+    state.preprocessingOnly = isOn;
   },
   setJobId: (id: string | null) => {
     state.jobId = id;
