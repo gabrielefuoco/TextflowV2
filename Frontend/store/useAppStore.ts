@@ -4,6 +4,7 @@ import type { LLMConfig, ChunkingConfig, JobStatus } from '../types';
 export interface ChunkFile {
   fileName: string;
   chunks: string[];
+  chunkNames: string[];
   attachment_path?: string;
 }
 
@@ -17,6 +18,7 @@ interface AppState {
   normalizeText: boolean;
   orderMode: "chunk" | "prompt";
   preprocessingOnly: boolean;
+  saveChunksMode: boolean;
   jobId: string | null;
   jobStatus: JobStatus;
   jobDetail: string | null;
@@ -40,6 +42,7 @@ const initialState: AppState = {
   normalizeText: true,
   orderMode: "chunk",
   preprocessingOnly: false,
+  saveChunksMode: false,
   jobId: null,
   jobStatus: 'idle',
   jobDetail: null,
@@ -77,7 +80,8 @@ const actions = {
   setChunkingConfig: (config: Partial<ChunkingConfig>) => { state.chunkingConfig = { ...state.chunkingConfig, ...config }; },
   setNormalizeText: (normalize: boolean) => { state.normalizeText = normalize; },
   setOrderMode: (mode: "chunk" | "prompt") => { state.orderMode = mode; },
-  setPreprocessingOnly: (isOn: boolean) => { state.preprocessingOnly = isOn; },
+  setPreprocessingOnly: (isOn: boolean) => { state.preprocessingOnly = isOn; if (isOn) state.saveChunksMode = false; },
+  setSaveChunksMode: (isOn: boolean) => { state.saveChunksMode = isOn; if (isOn) state.preprocessingOnly = false; },
 
   // --- LOGICA DI CHUNKING PER FILE MULTIPLI ---
   startChunking: () => {
@@ -90,8 +94,15 @@ const actions = {
     state.chunkingStatus = 'error';
     state.chunkingError = error instanceof Error ? error.message : String(error);
   },
-  setChunkFiles: (files: ChunkFile[]) => {
-    state.chunkFiles = files;
+  setChunkFiles: (files: Omit<ChunkFile, 'chunkNames'>[]) => {
+    state.chunkFiles = files.map(file => {
+      const dotIndex = file.fileName.lastIndexOf('.');
+      const fileStem = dotIndex > 0 ? file.fileName.substring(0, dotIndex) : file.fileName;
+      return {
+        ...file,
+        chunkNames: file.chunks.map((_, idx) => `${fileStem} - PT. ${idx + 1}`)
+      };
+    });
     state.currentFileIndex = 0;
     state.chunkingStatus = 'loaded';
   },
@@ -107,13 +118,23 @@ const actions = {
       state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks };
     }
   },
+  updateChunkName: (chunkIndex: number, name: string) => {
+    const file = state.chunkFiles[state.currentFileIndex];
+    if (file) {
+      const newChunkNames = [...file.chunkNames];
+      newChunkNames[chunkIndex] = name;
+      state.chunkFiles[state.currentFileIndex] = { ...file, chunkNames: newChunkNames };
+    }
+  },
   mergeWithNext: (chunkIndex: number) => {
     const file = state.chunkFiles[state.currentFileIndex];
     if (file && chunkIndex < file.chunks.length - 1) {
       const newChunks = [...file.chunks];
+      const newChunkNames = [...file.chunkNames];
       newChunks[chunkIndex] += '\n\n' + newChunks[chunkIndex + 1];
       newChunks.splice(chunkIndex + 1, 1);
-      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks };
+      newChunkNames.splice(chunkIndex + 1, 1);
+      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks, chunkNames: newChunkNames };
     }
   },
 
@@ -121,24 +142,30 @@ const actions = {
     const file = state.chunkFiles[state.currentFileIndex];
     if (file && file.chunks[chunkIndex] !== undefined) {
       const chunkToSplit = file.chunks[chunkIndex];
+      const originalName = file.chunkNames[chunkIndex];
       const part1 = chunkToSplit.substring(0, cursorPosition);
       const part2 = chunkToSplit.substring(cursorPosition);
 
       if (part1.trim().length === 0 && part2.trim().length === 0) return;
 
       const newChunks = [...file.chunks];
+      const newChunkNames = [...file.chunkNames];
       newChunks.splice(chunkIndex, 1, part1, part2);
-      
-      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks };
+      newChunkNames.splice(chunkIndex, 1, `${originalName}-a`, `${originalName}-b`);
+      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks, chunkNames: newChunkNames };
     }
   },
 
   createChunkAfter: (chunkIndex: number) => {
     const file = state.chunkFiles[state.currentFileIndex];
     if (file) {
+      const dotIndex = file.fileName.lastIndexOf('.');
+      const fileStem = dotIndex > 0 ? file.fileName.substring(0, dotIndex) : file.fileName;
       const newChunks = [...file.chunks];
+      const newChunkNames = [...file.chunkNames];
       newChunks.splice(chunkIndex + 1, 0, "");
-      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks };
+      newChunkNames.splice(chunkIndex + 1, 0, `${fileStem} - PT. ${chunkIndex + 2}`);
+      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks, chunkNames: newChunkNames };
     }
   },
 

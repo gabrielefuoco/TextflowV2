@@ -1,7 +1,7 @@
 // Frontend/components/ChunkEditor.tsx
 import React, { useRef } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { SplitIcon, PlusCircleIcon } from './icons';
+import { SplitIcon, PlusCircleIcon, FileIcon } from './icons';
 
 export const ChunkEditor = () => {
     const { 
@@ -10,9 +10,11 @@ export const ChunkEditor = () => {
         goToNextFile, 
         goToPrevFile, 
         updateChunk, 
+        updateChunkName,
         mergeWithNext,
         splitChunk,
-        createChunkAfter
+        createChunkAfter,
+        saveChunksMode
     } = useAppStore();
 
     const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
@@ -72,6 +74,24 @@ export const ChunkEditor = () => {
                                 </button>
                             </div>
                         </div>
+                        {saveChunksMode && (
+                            <div className="mb-2">
+                                <label htmlFor={`chunk-name-${index}`} className="sr-only">Chunk File Name</label>
+                                <div className="relative">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                        <FileIcon className="h-4 w-4 text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        id={`chunk-name-${index}`}
+                                        value={currentFile.chunkNames[index] || ''}
+                                        onChange={(e) => updateChunkName(index, e.target.value)}
+                                        className="w-full pl-9 pr-3 py-1.5 font-mono text-xs bg-slate-100 border border-slate-300 rounded-md shadow-inner focus:ring-1 focus:ring-green-500"
+                                        placeholder="Nome del file del chunk"
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <textarea
                             ref={(el) => (textareaRefs.current[index] = el)}
                             value={chunk}

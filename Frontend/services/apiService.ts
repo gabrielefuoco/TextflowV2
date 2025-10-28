@@ -5,7 +5,7 @@ export const getChunks = async (
     files: File[],
     config: ChunkingConfig,
     normalize: boolean
-): Promise<ChunkFile[]> => {
+): Promise<Array<Omit<ChunkFile, 'chunkNames'>>> => {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     formData.append('max_words', String(config.max_words));
@@ -31,17 +31,20 @@ export const processMultipleFiles = async (
     filesToProcess: ChunkFile[],
     prompts: Record<string, string>,
     llmConfig: LLMConfig,
-    orderMode: "chunk" | "prompt"
+    orderMode: "chunk" | "prompt",
+    saveChunksMode: boolean
 ): Promise<string> => {
     const payload = {
         files_to_process: filesToProcess.map(file => ({
             chunks: file.chunks.filter(c => c.trim().length > 0),
             file_name: file.fileName,
+            chunk_names: file.chunkNames,
             prompts,
             llm_config: llmConfig,
             order_mode: orderMode,
             attachment_path: file.attachment_path,
-        }))
+        })),
+        save_chunks_mode: saveChunksMode
     };
 
     if (payload.files_to_process.every(f => f.chunks.length === 0)) {

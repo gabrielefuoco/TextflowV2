@@ -49,9 +49,10 @@ export const ActionPanel = () => {
     try {
       const newJobId = await processMultipleFiles(
         store.chunkFiles,
-        store.preprocessingOnly ? {} : store.selectedPrompts,
+        (store.preprocessingOnly || store.saveChunksMode) ? {} : store.selectedPrompts,
         store.llmConfig,
-        store.orderMode
+        store.orderMode,
+        store.saveChunksMode
       );
       store.setJobId(newJobId);
     } catch (e) {
@@ -77,7 +78,10 @@ export const ActionPanel = () => {
         ) : (
           <button
             onClick={handleStartProcessing}
-            disabled={store.chunkFiles.length === 0 || (!store.preprocessingOnly && Object.keys(store.selectedPrompts).length === 0)}
+            disabled={
+              store.chunkFiles.length === 0 ||
+              ( !store.preprocessingOnly && !store.saveChunksMode && Object.keys(store.selectedPrompts).length === 0 )
+            }
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-brand-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-700 disabled:bg-slate-400"
           >
             <PlayIcon />

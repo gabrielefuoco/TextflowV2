@@ -35,30 +35,44 @@ async def universal_background_processor_async(job_id: str, request: MultiProces
         processed_outputs: Dict[str, bytes] = {}
         attachment_paths: List[str] = []
 
-        tasks = []
-        for file_task in request.files_to_process:
-            if file_task.prompts:
-                task = process_chunks_async(
-                    chunks=file_task.chunks,
-                    file_name=file_task.file_name,
-                    prompts=OrderedDict(file_task.prompts),
-                    model_config=file_task.llm_config.dict(),
-                    order_mode=file_task.order_mode,
-                    google_api_key=settings.google_api_key
-                )
-                tasks.append(task)
-            else:
-                output_filename = f"{Path(file_task.file_name).stem}.md"
-                output_content = "\n\n---\n\n".join(file_task.chunks)
-                processed_outputs[output_filename] = output_content.encode('utf-8')
+        if getattr(request, 'save_chunks_mode', False):
+            logger.info(f"Job {job_id}: modalità save_chunks_mode attiva. Salvataggio dei chunk come file separati.")
+            for file_task in request.files_to_process:
+                file_stem = Path(file_task.file_name).stem
+                for idx, chunk in enumerate(file_task.chunks):
+                    if file_task.chunk_names and idx < len(file_task.chunk_names):
+                        filename = f"{file_task.chunk_names[idx]}.md"
+                    else:
+                        filename = f"{file_stem} - PT. {idx + 1}.md"
+                    processed_outputs[filename] = chunk.encode('utf-8')
 
-            if getattr(file_task, 'attachment_path', None):
-                attachment_paths.append(file_task.attachment_path)  # type: ignore[arg-type]
+                if getattr(file_task, 'attachment_path', None):
+                    attachment_paths.append(file_task.attachment_path)  # type: ignore[arg-type]
+        else:
+            tasks = []
+            for file_task in request.files_to_process:
+                if file_task.prompts:
+                    task = process_chunks_async(
+                        chunks=file_task.chunks,
+                        file_name=file_task.file_name,
+                        prompts=OrderedDict(file_task.prompts),
+                        model_config=file_task.llm_config.dict(),
+                        order_mode=file_task.order_mode,
+                        google_api_key=settings.google_api_key
+                    )
+                    tasks.append(task)
+                else:
+                    output_filename = f"{Path(file_task.file_name).stem}.md"
+                    output_content = "\n\n---\n\n".join(file_task.chunks)
+                    processed_outputs[output_filename] = output_content.encode('utf-8')
 
-        if tasks:
-            results = await asyncio.gather(*tasks)
-            for output_filename, output_content in results:
-                processed_outputs[output_filename] = output_content.encode('utf-8')
+                if getattr(file_task, 'attachment_path', None):
+                    attachment_paths.append(file_task.attachment_path)  # type: ignore[arg-type]
+
+            if tasks:
+                results = await asyncio.gather(*tasks)
+                for output_filename, output_content in results:
+                    processed_outputs[output_filename] = output_content.encode('utf-8')
 
         JOBS[job_id]['status'] = 'completed'
         JOBS[job_id]['result'] = {
@@ -132,7 +146,7 @@ async def start_universal_processing_job(
         raise HTTPException(status_code=400, detail="La lista dei file da processare è vuota.")
 
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"status": "pending", "detail": f"Job creato per {len(request.files_to_process)} file."}
+    JOBS[job_id] = {"status": "pending", "detail": f"Job creato per {len(request.files_to_process)} file.", "request_save_chunks_mode": getattr(request, 'save_chunks_mode', False)}
     background_tasks.add_task(universal_background_processor_async, job_id, request)
     logger.info(f"Nuovo job universale creato con ID: {job_id}")
     return {"job_id": job_id, "status": "pending"}
@@ -157,8 +171,8 @@ async def get_job_results(job_id: str):
     processed_outputs = job_result.get("markdown", {})
     attachment_paths = job_result.get("attachments", [])
 
-    # Se c'è un solo file markdown e nessun allegato, restituisci solo il markdown
-    if len(processed_outputs) == 1 and not attachment_paths:
+    # Se c'è un solo file markdown e nessun allegato, restituisci solo il markdown (solo se non in save_chunks_mode)
+    if len(processed_outputs) == 1 and not attachment_paths and not JOBS[job_id].get('request_save_chunks_mode'):
         filename, content = list(processed_outputs.items())[0]
         return StreamingResponse(BytesIO(content), media_type="text/markdown", headers={"Content-Disposition": f"attachment; filename=\"{filename}\""})
     
@@ -184,7 +198,7 @@ async def get_job_results(job_id: str):
     zip_buffer.seek(0)
     
     # Pulizia delle cartelle temporanee degli allegati per questo job
-    unique_job_ids = {Path(p).parts[-2] for p in attachment_paths}
+    unique_job_ids = {Path(p).parts[-2] for p in attachment_paths if len(Path(p).parts) > 1}
     for req_id in unique_job_ids:
         shutil.rmtree(TEMP_ATTACHMENT_DIR / req_id, ignore_errors=True)
 

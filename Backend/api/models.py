@@ -18,6 +18,7 @@ class ProcessChunksRequest(BaseModel):
     """
     chunks: List[str]
     file_name: str
+    chunk_names: Optional[List[str]] = None
     prompts: Dict[str, str] = Field(default_factory=dict)
     order_mode: Literal["chunk", "prompt"] = Field(default="chunk")
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
@@ -29,6 +30,7 @@ class MultiProcessRequest(BaseModel):
     Contiene una lista di file, ognuno con i propri chunk pronti per essere processati.
     """
     files_to_process: List[ProcessChunksRequest]
+    save_chunks_mode: bool = False
 
 class ChunkingResponse(BaseModel):
     """Il modello di risposta per un singolo file processato dall'endpoint di chunking."""
