@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
 from typing import Dict, OrderedDict, Tuple, List
-from .chunking_strategy import get_splitter
 from .llm_handler import get_llm, call_llm_with_prompt
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -33,18 +32,6 @@ def process_chunks(
     output_filename = f"{Path(file_name).stem}.md"
     logging.info(f"Elaborazione LLM di '{file_name}' completata.")
     return output_filename, output_content
-
-def process_single_file(
-    file_content: str, file_name: str, prompts: OrderedDict,
-    chunking_config: Dict, model_config: Dict, google_api_key: str, order_mode: str = "chunk"
-) -> Tuple[str, str]:
-    """Divide il contenuto di un file in chunk e poi li elabora."""
-    logging.info(f"Eseguo lo splitting per: {file_name}")
-    splitter = get_splitter(chunking_config)
-    chunks = splitter.split(file_content)
-    logging.info(f"Contenuto di '{file_name}' diviso in {len(chunks)} chunk.")
-    
-    return process_chunks(chunks, file_name, prompts, model_config, google_api_key, order_mode)
 
 
 def compile_results_to_string(

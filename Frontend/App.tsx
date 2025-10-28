@@ -4,8 +4,11 @@ import { PromptSelector } from './components/PromptSelector';
 import { ConfigPanel } from './components/ConfigPanel';
 import { ActionPanel } from './components/ActionPanel';
 import { ResultDisplay } from './components/ResultDisplay';
+import { ChunkEditor } from './components/ChunkEditor';
+import { useAppStore } from './store/useAppStore';
 
 function App() {
+  const { chunkingStatus } = useAppStore();
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans">
       <main className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -23,6 +26,7 @@ function App() {
           <PromptSelector />
           <ConfigPanel />
           <ActionPanel />
+          {chunkingStatus === 'loaded' && <ChunkEditor />}
           <ResultDisplay />
         </div>
         

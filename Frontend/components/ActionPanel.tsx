@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { startProcessingJob, getJobStatus, ProcessingRequest } from '../services/apiService';
+import { getChunks, processEditedChunks, getJobStatus } from '../services/apiService';
 import { PlayIcon } from './icons';
 
 const JobProgressLog = ({ detail }: { detail: string | null }) => {
@@ -76,8 +76,6 @@ export const ActionPanel = () => {
   const { 
     uploadedFiles, 
     selectedPrompts, 
-    customPromptName,
-    customPromptContent,
     llmConfig, 
     chunkingConfig, 
     normalizeText,
@@ -87,12 +85,18 @@ export const ActionPanel = () => {
     jobStatus, 
     jobDetail,
     error,
+    chunkFile,
+    chunkingStatus,
+    chunkingError,
     startJob,
     setJobId,
     setResults,
     failJob, 
     completeJob,
     updateJobStatus,
+    startChunking,
+    setChunkFile,
+    failChunking,
   } = useAppStore();
 
   useEffect(() => {
@@ -121,72 +125,67 @@ export const ActionPanel = () => {
     }
   }, [jobId, jobStatus]);
 
-  const handleStartProcessing = async () => {
-    startJob();
-    
-    const allPrompts = { ...selectedPrompts };
-    if (customPromptName && customPromptContent) {
-      allPrompts[customPromptName] = customPromptContent;
-    }
-    
-    const config: ProcessingRequest = {
-        prompts: preprocessingOnly ? {} : allPrompts,
-        normalize_text: normalizeText,
-        order_mode: orderMode,
-        llm_config: llmConfig,
-        chunking_config: chunkingConfig,
-    };
-    
+  const handleChunking = async () => {
+    if (uploadedFiles.length === 0) return;
+    startChunking();
     try {
-      const newJobId = await startProcessingJob(uploadedFiles, config);
-      setJobId(newJobId);
-      updateJobStatus('processing', 'Job started. Polling for status...');
-    } catch (e: any) {
-      failJob(e.message || 'An unknown error occurred during processing.');
+      const result = await getChunks(uploadedFiles[0], chunkingConfig, normalizeText);
+      setChunkFile(result);
+    } catch (e) {
+      failChunking(e);
     }
   };
 
-  const isReady = uploadedFiles.length > 0 && 
-                  (preprocessingOnly || (Object.keys(selectedPrompts).length > 0 || (customPromptName && customPromptContent)));
+  const handleStartProcessing = async () => {
+    if (!chunkFile || (!preprocessingOnly && Object.keys(selectedPrompts).length === 0)) return;
+    startJob();
+    try {
+      const newJobId = await processEditedChunks({
+        chunks: chunkFile.chunks,
+        fileName: chunkFile.fileName,
+        prompts: preprocessingOnly ? {} : selectedPrompts,
+        llmConfig,
+        orderMode,
+      });
+      setJobId(newJobId);
+      updateJobStatus('processing', 'Job started. Polling for status...');
+    } catch (e) {
+      failJob(e);
+    }
+  };
+
+  const isReadyForChunking = uploadedFiles.length > 0 && chunkingStatus !== 'loading';
+  const isReadyForProcessing = chunkingStatus === 'loaded' && (preprocessingOnly || Object.keys(selectedPrompts).length > 0);
   const isProcessing = jobStatus === 'processing';
+
+  if (isProcessing) {
+    return <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 min-h-[120px]"><JobProgressLog detail={jobDetail} /></div>;
+  }
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 min-h-[120px]">
-      {isProcessing ? (
-        <JobProgressLog detail={jobDetail} />
-      ) : (
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        {chunkingStatus !== 'loaded' ? (
+          <button
+            onClick={handleChunking}
+            disabled={!isReadyForChunking}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-300"
+          >
+            {chunkingStatus === 'loading' ? 'Splitting...' : '1. Split into Chunks'}
+          </button>
+        ) : (
           <button
             onClick={handleStartProcessing}
-            disabled={!isReady}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-brand-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500"
+            disabled={!isReadyForProcessing}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-brand-600 text-white font-bold text-lg rounded-lg shadow-md hover:bg-brand-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-300"
           >
             <PlayIcon />
-            Start Pipeline
+            {preprocessingOnly ? '2. Export Chunks' : '2. Start AI Pipeline'}
           </button>
-          <div className="text-center sm:text-right min-h-[40px]">
-            {jobStatus !== 'idle' && (
-              <div>
-                  <div className="flex items-center gap-2 justify-center sm:justify-end">
-                      <span className="text-sm font-medium text-slate-600">Status:</span>
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        jobStatus === 'completed' ? 'bg-green-100 text-green-800' :
-                        jobStatus === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-slate-100 text-slate-800'
-                      }`}>
-                        {jobStatus}
-                      </span>
-                  </div>
-                  {/* FIX: The conditional rendering for jobDetail was causing a TypeScript error due to a redundant check.
-                      It has been corrected to only show the detail message when the job is successfully completed,
-                      which also improves UI clarity by not showing stale progress messages on failure. */}
-                  {jobStatus === 'completed' && jobDetail && <p className="text-sm text-slate-500 mt-1">{jobDetail}</p>}
-              </div>
-            )}
-            {error && <p className="text-sm text-red-600 mt-1 font-medium">{error}</p>}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
+      {chunkingError && <p className="text-sm text-red-600 mt-2 text-center">{chunkingError}</p>}
+      {error && <p className="text-sm text-red-600 mt-2 text-center">{error}</p>}
     </div>
   );
 };
