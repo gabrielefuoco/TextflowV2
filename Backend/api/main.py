@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 import zipfile
 from io import BytesIO
@@ -11,7 +12,8 @@ from pydantic import BaseModel
 
 from api.models import ProcessChunksRequest, MultiProcessRequest, ChunkingResponse, ChunkingConfig
 from api.config import settings
-from src.text_processor import process_chunks
+# SOSTITUIAMO L'IMPORT SINCRONO CON QUELLO ASINCRONO
+from src.text_processor import process_chunks_async 
 from src.ocr_handler import process_pdf_to_markdown
 from src.text_normalizer import normalize_text
 from src.chunking_strategy import get_splitter
@@ -26,32 +28,39 @@ class JobStatus(BaseModel):
 
 JOBS: Dict[str, Dict] = {}
 
-# --- Task in Background Universale ---
-def universal_background_processor(job_id: str, request: MultiProcessRequest):
+# --- LA TASK IN BACKGROUND ORA È ASINCRONA ---
+async def universal_background_processor_async(job_id: str, request: MultiProcessRequest):
     logger.info(f"Job {job_id}: Inizio Universal Processing per {len(request.files_to_process)} file.")
     JOBS[job_id]['status'] = 'processing'
     try:
         processed_outputs: Dict[str, bytes] = {}
         total_files = len(request.files_to_process)
-        for i, file_task in enumerate(request.files_to_process):
-            task_name = file_task.file_name
-            logger.info(f"Job {job_id} [{i+1}/{total_files}]: Processo '{task_name}'")
-            JOBS[job_id]['detail'] = f"Processing file {i+1}/{total_files}: {task_name}"
-
-            # La logica di processamento è già perfettamente isolata in process_chunks. La invochiamo.
-            output_filename, output_content = process_chunks(
+        
+        # Creiamo una task per ogni file da processare
+        tasks = []
+        for file_task in request.files_to_process:
+            task = process_chunks_async(
                 chunks=file_task.chunks,
-                file_name=task_name,
+                file_name=file_task.file_name,
                 prompts=OrderedDict(file_task.prompts),
                 model_config=file_task.llm_config.dict(),
                 order_mode=file_task.order_mode,
                 google_api_key=settings.google_api_key
             )
+            tasks.append(task)
+        
+        # Eseguiamo il processamento di tutti i file in parallelo
+        # Nota: questo parallelizza i file, mentre la logica interna
+        # parallelizza i chunk di ogni file. Doppio guadagno.
+        results = await asyncio.gather(*tasks)
+
+        for output_filename, output_content in results:
             processed_outputs[output_filename] = output_content.encode('utf-8')
 
         JOBS[job_id]['status'] = 'completed'
         JOBS[job_id]['result'] = processed_outputs
         logger.info(f"Job {job_id}: Universal Processing completato.")
+
     except Exception as e:
         logger.error(f"Job {job_id}: ERRORE CRITICO. Dettagli: {e}", exc_info=True)
         JOBS[job_id]['status'] = 'failed'
@@ -114,7 +123,8 @@ async def start_universal_processing_job(
 
     job_id = str(uuid.uuid4())
     JOBS[job_id] = {"status": "pending", "detail": f"Job creato per {len(request.files_to_process)} file."}
-    background_tasks.add_task(universal_background_processor, job_id, request)
+    # FastAPI è abbastanza intelligente da gestire una background task asincrona
+    background_tasks.add_task(universal_background_processor_async, job_id, request)
     logger.info(f"Nuovo job universale creato con ID: {job_id}")
     return {"job_id": job_id, "status": "pending"}
 
