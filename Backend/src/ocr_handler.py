@@ -1,78 +1,100 @@
 import logging
-from pathlib import Path
-from typing import List, Dict
-from mistralai import Mistral, models
-from pypdf import PdfReader, PdfWriter
 import io
+import base64
+import re
+import binascii
+from pathlib import Path
+from typing import List, Dict, Tuple
+
+from mistralai import Mistral, models
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def process_pdf_to_markdown(pdf_bytes: bytes, file_name: str, ocr_config: Dict, mistral_api_key: str) -> str:
-    """Converte il contenuto di un PDF (in byte) in una stringa Markdown usando l'API OCR di Mistral."""
+TEMP_ATTACHMENT_DIR = Path("/tmp/textflow_attachments")
+TEMP_ATTACHMENT_DIR.mkdir(exist_ok=True)
+
+def clean_filename(name: str) -> str:
+    """Rimuove caratteri non validi per un nome di file o cartella."""
+    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+    return name
+
+def save_image(base64_str: str, img_id: str, output_dir: Path) -> str | None:
+    """Decodifica e salva un'immagine base64, restituendo il nome del file."""
+    try:
+        if "data:" in base64_str:
+            header, base64_data = base64_str.split(",", 1)
+            ext = header.split("/")[1].split(";")[0]
+        else:
+            base64_data = base64_str
+            ext = "jpg" # Default
+
+        image_data = base64.b64decode(base64_data)
+        clean_id = clean_filename(img_id)
+        output_filename = f"{clean_id}.{ext}"
+        full_path = output_dir / output_filename
+
+        with open(full_path, "wb") as f:
+            f.write(image_data)
+        return output_filename
+    except (IOError, binascii.Error, ValueError) as e:
+        logger.error(f"Errore nel salvataggio dell'immagine {img_id}: {e}")
+        return None
+
+def process_pdf_to_markdown(pdf_bytes: bytes, file_name: str, job_id: str, mistral_api_key: str) -> Tuple[str, Path]:
+    """
+    Converte un PDF in Markdown, estrae le immagini, le salva in una cartella temporanea
+    specifica per il job e aggiorna i link nel markdown.
+    """
     if not mistral_api_key:
-        logger.error("MISTRAL_API_KEY non trovata.")
         raise ValueError("MISTRAL_API_KEY non configurata.")
 
     client = Mistral(api_key=mistral_api_key)
-    pdf_stream = io.BytesIO(pdf_bytes)
+    
+    # Crea una directory unica per gli allegati di questo file in questo job
+    cleaned_file_stem = clean_filename(Path(file_name).stem)
+    attachments_path = TEMP_ATTACHMENT_DIR / job_id / cleaned_file_stem
+    attachments_path.mkdir(parents=True, exist_ok=True)
 
     try:
-        max_size = ocr_config.get("max_chunk_size_mb", 40)
-        pdf_parts_bytes = split_pdf_in_memory(pdf_stream, max_size_mb=max_size)
+        logger.info(f"Processando '{file_name}' con OCR (Job: {job_id}).")
+        
+        # Carica il file e ottieni l'URL firmato
+        uploaded_file = client.files.upload(
+            file={"file_name": file_name, "content": pdf_bytes},
+            purpose="ocr"
+        )
+        signed_url = client.files.get_signed_url(file_id=uploaded_file.id, expiry=1)
 
-        if len(pdf_parts_bytes) > 1:
-            logger.info(f"PDF '{file_name}' troppo grande, diviso in {len(pdf_parts_bytes)} parti per l'OCR.")
+        # Esegui l'OCR, questa volta chiedendo le immagini
+        ocr_response = client.ocr.process(
+            document=models.DocumentURLChunk(document_url=signed_url.url),
+            model="mistral-ocr-latest",
+            include_image_base64=True
+        )
 
-        full_markdown_content = []
-        for i, part_bytes in enumerate(pdf_parts_bytes, 1):
-            logger.info(f"Processando parte {i}/{len(pdf_parts_bytes)} di '{file_name}' con OCR.")
+        markdown_pages = []
+        for page in ocr_response.pages:
+            markdown_page = page.markdown
+            if page.images:
+                images_dict = {img.id: img.image_base64 for img in page.images}
+                # Aggiorna il markdown con i link relativi corretti per lo zip finale
+                for img_id, base64_str in images_dict.items():
+                    saved_filename = save_image(base64_str, img_id, attachments_path)
+                    if saved_filename:
+                        placeholder = f"![{img_id}]({img_id})"
+                        # Sintassi Obsidian-friendly per lo zip finale
+                        replacement = f"![[Allegati/{cleaned_file_stem}/{saved_filename}]]"
+                        markdown_page = markdown_page.replace(placeholder, replacement)
+            markdown_pages.append(markdown_page)
+        
+        # Pulisci il file temporaneo su Mistral
+        client.files.delete(file_id=uploaded_file.id)
 
-            uploaded_file = client.files.upload(
-                file={"file_name": f"{Path(file_name).stem}_part{i}.pdf", "content": part_bytes},
-                purpose="ocr"
-            )
-
-            signed_url = client.files.get_signed_url(file_id=uploaded_file.id, expiry=1)
-
-            ocr_response = client.ocr.process(
-                document=models.DocumentURLChunk(document_url=signed_url.url),
-                model="mistral-ocr-latest",
-                include_image_base64=False
-            )
-
-            part_markdown = "\n\n".join([page.markdown for page in ocr_response.pages])
-            full_markdown_content.append(part_markdown)
-
-            client.files.delete(file_id=uploaded_file.id)
-
-        return "\n\n".join(full_markdown_content)
+        full_markdown = "\n\n".join(markdown_pages)
+        return full_markdown, attachments_path
 
     except Exception as e:
         logger.error(f"Errore critico durante l'OCR di '{file_name}': {e}", exc_info=True)
-        return f"## ERRORE OCR\n\nImpossibile processare il file '{file_name}'.\n\nDettagli: {e}"
-
-def split_pdf_in_memory(pdf_stream: io.BytesIO, max_size_mb: int) -> List[bytes]:
-    """Divide un PDF in memoria in parti più piccole, restituendo una lista di byte."""
-    pdf_stream.seek(0)
-    pdf_size_mb = len(pdf_stream.getvalue()) / (1024 * 1024)
-    if pdf_size_mb <= max_size_mb:
-        return [pdf_stream.getvalue()]
-
-    pdf = PdfReader(pdf_stream)
-    total_pages = len(pdf.pages)
-    pages_per_chunk = max(1, int(total_pages * (max_size_mb / pdf_size_mb)))
-
-    split_files_bytes = []
-    for i in range(0, total_pages, pages_per_chunk):
-        writer = PdfWriter()
-        end_page = min(i + pages_per_chunk, total_pages)
-        for page_num in range(i, end_page):
-            writer.add_page(pdf.pages[page_num])
-
-        part_buffer = io.BytesIO()
-        writer.write(part_buffer)
-        part_buffer.seek(0)
-        split_files_bytes.append(part_buffer.getvalue())
-
-    return split_files_bytes
+        error_markdown = f"## ERRORE OCR\n\nImpossibile processare il file '{file_name}'.\n\nDettagli: {e}"
+        return error_markdown, attachments_path

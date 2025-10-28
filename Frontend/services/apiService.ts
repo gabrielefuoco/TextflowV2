@@ -19,7 +19,12 @@ export const getChunks = async (
         throw new Error(error.detail);
     }
     const data = await response.json();
-    return data.map((item: any) => ({ fileName: item.file_name, chunks: item.chunks }));
+    // Assicurati di mappare il nuovo campo
+    return data.map((item: any) => ({ 
+        fileName: item.file_name, 
+        chunks: item.chunks, 
+        attachment_path: item.attachment_path 
+    }));
 };
 
 export const processMultipleFiles = async (
@@ -35,6 +40,7 @@ export const processMultipleFiles = async (
             prompts,
             llm_config: llmConfig,
             order_mode: orderMode,
+            attachment_path: file.attachment_path,
         }))
     };
 

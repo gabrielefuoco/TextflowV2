@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Optional
 
 class LLMConfig(BaseModel):
     """Configurazione per il Large Language Model."""
@@ -16,11 +16,12 @@ class ProcessChunksRequest(BaseModel):
     Rappresenta UN singolo file con i suoi chunk e la sua configurazione.
     Sarà un mattone per costruire la richiesta universale.
     """
-    chunks: List[str] = Field(..., min_length=1)
+    chunks: List[str]
     file_name: str
     prompts: Dict[str, str] = Field(default_factory=dict)
     order_mode: Literal["chunk", "prompt"] = Field(default="chunk")
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
+    attachment_path: Optional[str] = None
 
 class MultiProcessRequest(BaseModel):
     """
@@ -33,3 +34,4 @@ class ChunkingResponse(BaseModel):
     """Il modello di risposta per un singolo file processato dall'endpoint di chunking."""
     file_name: str
     chunks: List[str]
+    attachment_path: Optional[str] = None

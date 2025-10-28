@@ -4,6 +4,7 @@ import type { LLMConfig, ChunkingConfig, JobStatus } from '../types';
 export interface ChunkFile {
   fileName: string;
   chunks: string[];
+  attachment_path?: string;
 }
 
 interface AppState {
@@ -34,7 +35,7 @@ const initialState: AppState = {
   selectedPrompts: {},
   customPromptName: "",
   customPromptContent: "",
-  llmConfig: { model_name: 'gemini-2.5-flash', temperature: 0.7 },
+  llmConfig: { model_name: 'gemini-1.5-flash', temperature: 0.7 },
   chunkingConfig: { max_words: 1000, min_words: 300 },
   normalizeText: true,
   orderMode: "chunk",
@@ -112,6 +113,31 @@ const actions = {
       const newChunks = [...file.chunks];
       newChunks[chunkIndex] += '\n\n' + newChunks[chunkIndex + 1];
       newChunks.splice(chunkIndex + 1, 1);
+      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks };
+    }
+  },
+
+  splitChunk: (chunkIndex: number, cursorPosition: number) => {
+    const file = state.chunkFiles[state.currentFileIndex];
+    if (file && file.chunks[chunkIndex] !== undefined) {
+      const chunkToSplit = file.chunks[chunkIndex];
+      const part1 = chunkToSplit.substring(0, cursorPosition);
+      const part2 = chunkToSplit.substring(cursorPosition);
+
+      if (part1.trim().length === 0 && part2.trim().length === 0) return;
+
+      const newChunks = [...file.chunks];
+      newChunks.splice(chunkIndex, 1, part1, part2);
+      
+      state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks };
+    }
+  },
+
+  createChunkAfter: (chunkIndex: number) => {
+    const file = state.chunkFiles[state.currentFileIndex];
+    if (file) {
+      const newChunks = [...file.chunks];
+      newChunks.splice(chunkIndex + 1, 0, "");
       state.chunkFiles[state.currentFileIndex] = { ...file, chunks: newChunks };
     }
   },
