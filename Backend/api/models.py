@@ -11,17 +11,25 @@ class ChunkingConfig(BaseModel):
     max_words: int = Field(default=1000, gt=0)
     min_words: int = Field(default=300, gt=0)
 
-# NUOVO MODELLO PER LA RICHIESTA DI PROCESSING DEI CHUNK
 class ProcessChunksRequest(BaseModel):
-    """Richiesta per processare una lista di chunk pre-esistenti e modificati dall'utente."""
-    chunks: List[str] = Field(..., min_length=1, description="La lista di chunk di testo da processare.")
-    file_name: str = Field(..., description="Il nome del file originale, per logging e output.")
+    """
+    Rappresenta UN singolo file con i suoi chunk e la sua configurazione.
+    Sarà un mattone per costruire la richiesta universale.
+    """
+    chunks: List[str] = Field(..., min_length=1)
+    file_name: str
     prompts: Dict[str, str] = Field(default_factory=dict)
     order_mode: Literal["chunk", "prompt"] = Field(default="chunk")
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
 
-# NUOVO MODELLO PER L'OUTPUT DEL CHUNKING
+class MultiProcessRequest(BaseModel):
+    """
+    Il payload definitivo per l'endpoint di processing universale.
+    Contiene una lista di file, ognuno con i propri chunk pronti per essere processati.
+    """
+    files_to_process: List[ProcessChunksRequest]
+
 class ChunkingResponse(BaseModel):
-    """Il modello di risposta per l'endpoint di chunking."""
+    """Il modello di risposta per un singolo file processato dall'endpoint di chunking."""
     file_name: str
     chunks: List[str]
