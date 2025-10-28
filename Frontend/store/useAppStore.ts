@@ -33,7 +33,7 @@ const initialState: AppState = {
   selectedPrompts: {},
   customPromptName: "",
   customPromptContent: "",
-  llmConfig: { model_name: 'gemini-1.5-flash-latest', temperature: 0.7 },
+  llmConfig: { model_name: 'gemini-2.5-flash', temperature: 0.7 },
   chunkingConfig: { max_words: 1000, min_words: 300 },
   normalizeText: true,
   orderMode: "chunk",
