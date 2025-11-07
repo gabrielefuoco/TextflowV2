@@ -1,14 +1,148 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { Card } from './Card';
 import { PromptIcon, TrashIcon, EyeIcon } from './icons';
 import { Modal } from './Modal';
 
+const cleaner = `
+# **Obiettivo:** Eseguire un processo accurato di pulizia e formattazione del testo fornito, garantendo coerenza, leggibilità e integrità del contenuto originale. 
+Non è consentito interpretare, modificare o aggiungere informazioni. L’esecuzione deve limitarsi alle istruzioni seguenti.
+
+---
+
+## Direttive di Sanitizzazione
+
+1. **Rimozione di artefatti OCR:** Eliminare ogni riferimento a intestazioni o piè di pagina (es. “Pagina X di Y”), numeri di riga, marcatori di scansione e caratteri estranei.
+
+2. **Ricongiungimento di parole spezzate:** Identificare e correggere parole divise da un a-capo forzato (es. \`elabora-\\nzione\` → \`elaborazione\`).
+
+3. **Mantenimento dell’integrità semantica:** Non riassumere, parafrasare, correggere o modificare il significato del testo. 
+   Eventuali errori grammaticali o sintattici vanno mantenuti se il testo è comprensibile.
+
+4. **Divieto di aggiunta di contenuti:** Non introdurre, dedurre o ipotizzare informazioni non presenti nel testo originale.
+
+---
+
+## Protocolli di Formattazione e Normalizzazione
+
+1. **Strutturazione Markdown:** - Identificare titoli e sottotitoli impliciti e applicare la sintassi corretta: 
+     \`#\` per H1, \`##\` per H2, \`###\` per H3, ecc. 
+   - Mantenere una gerarchia coerente. 
+   - Conservare eventuale sintassi Markdown già presente, correggendo solo errori evidenti.
+
+2. **Normalizzazione dello spazio bianco:** - Ridurre spazi multipli a uno singolo. 
+   - Eliminare spazi all’inizio e alla fine delle righe. 
+   - Ridurre a-capi multipli a un singolo a-capo vuoto per separare i paragrafi.
+
+3. **Formattazione delle formule LaTeX:** - Identificare formule matematiche o scientifiche. 
+   - Se prive di delimitatori, incapsularle correttamente: 
+     - Inline → \`$...$\` 
+     - Blocco → \`$$...$$\`
+
+4. **Escaping dei caratteri speciali Markdown:** - Anteporre \`\\\` ai caratteri \`<\`, \`>\`, \`#\`, \`*\`, \`_\` quando non sono utilizzati per la formattazione.
+
+---
+
+## Output
+
+Restituire esclusivamente il testo pulito e formattato, senza commenti, spiegazioni o contenuti aggiuntivi.
+
+---
+
+## Testo da processare:
+
+{text_chunk}
+`;
+
+const formatta = `
+**Persona e Obiettivo:**
+Agisci come un assistente AI esperto nella formattazione di documenti tecnici e accademici. Il tuo obiettivo è prendere un testo fornito dall'utente e riformattarlo in Markdown, seguendo in modo pedissequo e rigoroso un insieme di regole imperative. Il risultato finale deve essere una versione pulita, organizzata e accurata degli appunti originali, pronta per lo studio.
+
+**Compito Principale:**
+Formatta il testo fornito in input applicando dettagliatamente e senza eccezioni le seguenti istruzioni.
+
+**Istruzioni Dettagliate di Formattazione:**
+##### **1. Regole Generali**
+- **Organizzazione e Formato:** Utilizza il formato Markdown per organizzare il testo in paragrafi chiari e schematizzati. Assicurati che tutti i concetti rilevanti siano coperti senza aggiungere contenuti superflui.
+- **Integrità del Contenuto:** Mantieni l'integrità del contenuto originale. Non tralasciare alcun punto o informazione.
+- **Correzione di Errori:** Correggi esclusivamente **errori di battitura e grammaticali oggettivi**. Se una sezione è concettualmente ambigua o poco chiara, lasciala così com'è.
+- **Formule e Codice:** Mantieni intatti tutti i blocchi di formule e codice, incluse eventuali spiegazioni associate.
+- **Immagini:** Non rimuovere i tag immagine. Lascia i tag nella forma \`![[]]\` come si trovano nel testo originale.
+- **Sintesi Conclusiva:** Non includere una sezione di sintesi o un riepilogo alla fine. Il testo formattato deve essere autosufficiente.
+##### **2. Blocchi Speciali (Callouts) - Regole di Applicazione Strette**
+Applica i callout solo quando il testo corrisponde **esattamente** a una delle seguenti categorie:
+- **Usa \`>[!NOTE]\` esclusivamente per:**
+- Note esplicative, commenti o approfondimenti **esterni** al flusso principale del testo. Non usarlo per definizioni, formule o concetti chiave.
+**Esempio di Riferimento:** _Input:_
+\`\`\`
+**IDEA**: Suddividere il grafo in diverse partizioni.
+- Applichiamo ricorsivamente il taglio minimo.
+- Dobbiamo rivedere la definizione di taglio.
+\`\`\`
+_Output Atteso:_
+\`\`\`
+>[!NOTE] IDEA
+>Suddividere il grafo in diverse partizioni.
+>- Applichiamo ricorsivamente il taglio minimo.
+>- Dobbiamo rivedere la definizione di taglio.
+\`\`\`
+- **Usa \`>[!DANGER]\` esclusivamente per:**
+- Descrizioni di problemi, criticità, limitazioni, svantaggi o avvertimenti.
+- **Usa \`>[!ABSTRACT]\` per Algoritmi e Pseudocodice, seguendo questa procedura imperativa:**
+- Se il testo è un algoritmo o uno pseudocodice (identificato dal titolo "Algoritmo:", "Pseudocodice:", o da una struttura con \`Input/Output\`), **DEVI** formattarlo secondo le seguenti regole:
+1. La prima riga (il nome dell'algoritmo) **DEVE** essere racchiusa in un callout singolo: \`> [!abstract]\`.
+2. **TUTTE** le righe dell'algoritmo, inclusa la prima, devono iniziare con il carattere \`>\`.
+3. L'indentazione dei passaggi annidati **DEVE** essere rappresentata usando \`\\quad\`, \`\\quad\\quad\`, \`\\quad\\quad\\quad\`, etc., all'interno dell'ambiente matematico.
+4. Ogni riga di testo dell'algoritmo **DEVE** essere trattata come una formula inline, quindi racchiusa interamente in \`$ ... $\`.
+5. Le parole chiave descrittive ("se", "per", "a", "scambia", "restituisci", etc.) **DEVONO** essere racchiuse in \`\\text{...}\`.
+6. Tutte le variabili e i simboli matematici devono seguire la sintassi LaTeX.
+- **Esempio di Riferimento Obbligatorio (QuickSort):**
+*Input:*
+\`\`\`
+Algoritmo: QuickSort(A, p, r)
+se p < r
+q = Partition(A, p, r)
+QuickSort(A, p, q - 1)
+QuickSort(A, q + 1, r)
+Partition(A, p, r)
+x = A[r]
+i = p - 1
+per j = p a r - 1
+se A[j] <= x
+i = i + 1
+scambia A[i] con A[j]
+scambia A[i + 1] con A[r]
+restituisci i + 1
+\`\`\`
+
+*Output Atteso*:
+
+> [!abstract] $\\text{QuickSort}(A, p, r)$
+> $\\quad \\text{se}$ $p < r$
+> $\\quad\\quad q = \\text{Partition}(A, p, r)$
+> $\\quad\\quad \\text{QuickSort}(A, p, q - 1)$
+> $\\quad\\quad \\text{QuickSort}(A, q + 1, r)$
+>
+> $\\text{Partition}(A, p, r)$
+> $\\quad x = A[r]$
+> $\\quad i = p - 1$
+> $\\quad \\text{per}$ $j = p$ $\\text{a}$ $r - 1$
+> $\\quad\\quad \\text{se}$ $A[j] \\leq x$
+> $\\quad\\quad\\quad i = i + 1$
+> $\\quad\\quad\\quad \\text{scambia}$ $A[i]$ $\\text{con}$ $A[j]$
+> $\\quad \\text{scambia}$ $A[i + 1]$ $\\text{con}$ $A[r]$
+> $\\quad \\text{restituisci}$ $i + 1$
+##### Testo da formattare:
+{text_chunk}
+`;
+
+
 const DEFAULT_PROMPTS: Record<string, string> = {
   'Summarize': 'Based on the following text, extract the key concepts and provide a detailed technical summary in markdown format.\n\nText to analyze:\n---\n{text_chunk}\n---',
   'Key Points': 'Extract the main key points from the following text as a bulleted list in markdown.\n\nText:\n---\n{text_chunk}\n---',
-  'Sentiment Analysis': 'Analyze the sentiment of the following text. Is it positive, negative, or neutral? Explain your reasoning.\n\nText:\n---\n{text_chunk}\n---'
+  'Sentiment Analysis': 'Analyze the sentiment of the following text. Is it positive, negative, or neutral? Explain your reasoning.\n\nText:\n---\n{text_chunk}\n---',
+  'Cleaner': cleaner,
+  'Formatta': formatta
 };
 
 export const PromptSelector = () => {
